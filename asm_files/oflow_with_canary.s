@@ -11,7 +11,6 @@
  *  r4-r11: Local variables
  *  r0: return values
  */
-#include <asm/unistd.h>
 .syntax unified
 .arm
 .cpu cortex-a7
@@ -61,8 +60,8 @@
 .section .text
 .global main
 .equ buffer_size, 12
-.equ target_size, 5
-.equ canary_size, 7
+.equ target_size, 4
+.equ canary_size, 6
 
 main:
   push {r0-r7,fp,lr}
@@ -81,35 +80,18 @@ main:
   ldr r0, =_str_format    // Load format string into R0
   mov r1, r6            // Move address on stack into R1
   bl scanf
+  // Why is scanf removing the 'h' in "hacker"?
 
   // Test target == "pass"
   ldr r1, [r5]
   ldr r2, =#0x73736170
   cmp r1, r2
   blne target_fail
+
   
   // Test canary == "hacker"
-  mov r0, #0
-  mov r1, [canary_size -1]
-  canary_cmp_loop:
-    ldr r1, [r6]
-    ldr r7, =#0x6B636168
-    b:
-    eor r7, r7, r1
-    ldr r8, =#0x007265
-    ldr r1, [r6, #4]
-    eor r8, r8, r1
-    add r1, r8, r7
-    mov r2, #0x0
-    cmp r1, r2
-    bne exit
-
 
   // TODO if pass then print key
-  
-  
-
-  // Test stack canary
 
   mov r0, r4
   mov r1, r5
@@ -117,7 +99,6 @@ main:
   bl review_stack
 
   b exit
-
 end_main:
 
 test_target:
@@ -138,51 +119,83 @@ review_stack:
   mov r5, r1
   mov r6, r2
   
+  // Print out canary //
   ldr r0, =_canary_str
   ldr r1, =_canary_str_len
   bl write_to_stdout
   
-  mov r0, r4 //TODO Dont use puts. print each character with write
-  bl puts
+  mov r0, r4
+  ldr r1, =canary_size
+  bl write_by_len
   
-  ldr r0, =_target_str
-  ldr r1, =_target_str_len
-  bl write_to_stdout
-
-  mov r0, r5  // TODO dont use puts. print each character with write
-  bl puts
-
-  ldr r0, =_buffer_str
-  ldr r1, =_buffer_str_len
-  bl write_to_stdout
-  
-  //mov r0, r6
-  //bl puts
-  
-  mov r9, #0
-  mov r8, [buffer_size - 1]
-  for_loop:
-    mov r0, #1
-    mov r1, r6
-    mov r2, #1
-    mov r7, #4
-    svc #0 
-
-    cmp r9, r8
-    beq end_for_loop
-    add r9, r9, #1
-    add r6, r6, #1
-    b for_loop
-
-  end_for_loop:
-    
   ldr r0, =_newline_str
   ldr r1, =_newline_str_len
   bl write_to_stdout
 
+
+  // Print out target //
+  ldr r0, =_target_str
+  ldr r1, =_target_str_len
+  bl write_to_stdout
+
+  mov r0, r5
+  ldr r1, =target_size
+  bl write_by_len
+  
+  ldr r0, =_newline_str
+  ldr r1, =_newline_str_len
+  bl write_to_stdout
+
+  // Print out buffer //
+  ldr r0, =_buffer_str
+  ldr r1, =_buffer_str_len
+  bl write_to_stdout
+  
+  mov r0, r6
+  ldr r1, =buffer_size
+  bl write_by_len
+  
+  ldr r0, =_newline_str
+  ldr r1, =_newline_str_len
+  bl write_to_stdout
+  
   pop {r4,r5,r6,fp,lr}
   bx lr
 end_review_stack:
+
+
+/* write_by_len
+ * Input: 
+ *  r0: char* buffer
+ *  r1: lenth to print out
+ * Output: None
+ * Side Effects: Prints r1 chars from r0 to stdout.
+ */
+write_by_len:
+  push {r4-r9, fp, lr}
+
+  mov r4, #0
+  mov r5, r1
+  sub r5, r5, #1
+  mov r1, r0
+  for_loop_one_write_by_len:
+    mov r0, #1
+    mov r2, #1
+    mov r7, #4
+    svc #0 
+
+    cmp r4, r5
+    beq end_for_loop_one_write_by_len
+    add r4, r4, #1
+    add r1, r1, #1
+    b for_loop_one_write_by_len
+
+  end_for_loop_one_write_by_len:
+
+  pop {r4-r9, fp, lr}
+  blx lr
+end_write_by_len:
+
 
 
 target_fail: 
@@ -229,13 +242,11 @@ setup_local_vars:
   // Set up target: "fail"
   ldr r7, =#0x6C696166
   str r7, [r5]
-  ldr r7, =#0x0
-  str r7, [r5, #4]
   
   // Set up Canary: "hacker"
   ldr r7, =#0x6B636168
   str r7, [r4]
-  ldr r7, =#0x007265
+  ldr r7, =#0x7265
   str r7, [r4, #4]
 
   b continue_after_setup
