@@ -1,4 +1,16 @@
-/* System Call Information:
+/* Local Variables: The way this binary allocates space on the stack and then 
+ * keeps track of those variables is not consistent with typical compiled
+ * programs. In this program, a point to each variable on the stack is 
+ * stored in a register. This can be done because we know exactly how many 
+ * local variables we have and the number of local variables is small. 
+ * Typically in compiled programs an offset from the stack pointer is stored. 
+ * To access a local variable we would add the offset to the stack pointer.
+ * 
+ * An additional step taken in this binary is to zero out memory on the stack. This is
+ * typically done by a compiler during program initialization. 
+ *
+ * Assembly Information:
+ * System Call Information:
  *   man 2 syscall                                    // shows the ARM ABI for syscalls
  *   /usr/include/arm-linux-gnueabihf/asm/unistd-common.h // header for syscalls
  * Assemble and Link:
@@ -14,7 +26,6 @@
 .syntax unified
 .arm
 .cpu cortex-a7
-.extern scanf
 
 
 .section .text
@@ -26,17 +37,21 @@
 main:
   push {r0-r7,fp,lr}
   
-  // Commandline argument parsing
-  //ldr r2, [r0]
-  ldr r8, [r1, #4]
+  // Make sure there is an argument
+  mov r2, r0
+  cmp r2, #1
+  bne _get_argument
 
-  /* ## SETUP LOCAL VARIABLES ##
-   * Set up space for local variables 
-   * At this point we have the following temp registers:
-   *  r4 = canary, 4 bytes
-   *  r5 = target, 4 bytes
-   *  r6 = overflow buffer, 24 bytes
-   */
+  // Print usage statement 
+  ldr r0, = _usage_str
+  ldr r1, = _usage_str_len
+  bl write_to_stdout
+  b exit
+
+  _get_argument:
+  ldr r8, [r1, #4] // r8 <-- (char *) argv[1]
+
+  // ## SETUP LOCAL VARIABLES ##
   sub sp, sp, canary_size
   mov r4, sp        // Space for canary
   sub sp, sp, target_size
@@ -54,9 +69,19 @@ main:
   ldr r7, =#0x7265
   str r7, [r4, #4]
 
+  mov r0, r6
+  mov r1, buffer_size 
+  bl memzero
+
+  // Copy commandline argument to buffer.
   mov r0, r8
   mov r1, r6
   bl copy_str
+  
+  mov r0, r4
+  mov r1, r5
+  mov r2, r6
+  bl review_stack
 
   mov r8, 0
   // Test target == "pass"
@@ -81,16 +106,20 @@ main:
   cmp r8, #2
   bleq print_key
 
-  mov r0, r4
-  mov r1, r5
-  mov r2, r6
-  bl review_stack
-
+  
+  exit:
   pop {r0-r7,fp,lr}
   mov r7, #1
   svc #0
 
 
+/* target_fail:
+ *  Informs user that the target was overwritten with incorrect value.
+ * Input: None
+ * Output: None
+ * Side Effects:
+ *  Writes failure message to stdout.
+ */
 target_fail: 
   push {r7,fp}
   mov r0, #1
@@ -103,6 +132,13 @@ target_fail:
   bx lr
 
 
+/* canary_fail:
+ *  Informs user that the canary was overwritten.
+ * Input: None
+ * Output: None
+ * Side Effects:
+ *  Writes failure message to stdout.
+ */
 canary_fail:
   push {r7, fp}
   mov r0, #1
@@ -115,6 +151,13 @@ canary_fail:
   bx lr
   
 
+/* print_key:
+ *  Shows the secret key with the target buffer is overwritten correctly.
+ * Input: None
+ * Output: None
+ * Side Effects:
+ *  Writes secret key to stdout.
+ */
 print_key:
   push {r4-r10, fp, lr} 
   
@@ -130,12 +173,14 @@ print_key:
   bx lr
 
 
-/* Review Stack
+/* review_stack:
+ *  function to print out formatted local variable contents.
  * Input: 
  *  r0: canary
  *  r1: target
  *  r2: overflow buffer
- * Output:
+ * Output: None
+ * Side effects:
  *  Prints the contents of the canary, target, and overflow buffers.
  */
 review_stack:
@@ -188,10 +233,22 @@ review_stack:
   ldr r1, =_newline_str_len
   bl write_to_stdout
   
+  ldr r0, =_newline_str
+  ldr r1, =_newline_str_len
+  bl write_to_stdout
+  
   pop {r4,r5,r6,fp,lr}
   bx lr
 
 
+/* copy_str:
+ *  Copy string from one buffer to another..
+ * Input: 
+ *  r0: char* src
+ *  r1: char* dst
+ * Output: None
+ * Side Effects: N/a
+ */
 copy_str:
   push {lr}
   _copy_str_while_loop:
@@ -211,7 +268,37 @@ copy_str:
   bx lr 
 
 
-/* write_by_len
+/* memzero:
+ *  Fill vuffer with zeros.
+ * Input: 
+ *  r0: char* buffer
+ *  r1: lenth of buffer
+ * Output: None
+ * Side Effects: N/A
+ */
+memzero:
+  push {r4, lr}
+  cmp r1, #0
+  add r1, #1
+  beq _end_memzero
+  _memzero:
+  mov r2, #0x0
+    _memzero_while_loop:
+    sub r1, #1
+    cmp r1, #0
+    beq _end_memzero_while_loop
+    strb r2, [r0]
+    add r0, #1
+    b _memzero_while_loop
+    _end_memzero_while_loop:
+  _end_memzero:
+
+  pop {r4, lr}
+  bx lr
+
+
+/* write_by_len:
+ *  print output using given length
  * Input: 
  *  r0: char* buffer
  *  r1: lenth to print out
@@ -252,6 +339,14 @@ write_by_len:
   bx lr
 
 
+/* write_to_stdout:
+ *  Wrapper for Syscall::write. Prints null-terminated string.
+ * Input: 
+ *  r0: char* buffer
+ *  r1: lenth to print out
+ * Output: None
+ * Side Effects: Prints r1 chars from r0 to stdout.
+ */
 write_to_stdout:
   push {fp}
   mov r2, r1
@@ -265,6 +360,8 @@ write_to_stdout:
 
 .section .data
 .balign 4
+  _usage_str:      .asciz "./<binary> <string>\n"
+  .set _usage_str_len, .-_usage_str
   _canary_str:     .asciz "Canary: "
   .set _canary_str_len, .-_canary_str
   _canary_fail:     .asciz "You overwrote the stack canary.\n"
