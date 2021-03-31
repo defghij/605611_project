@@ -2,20 +2,39 @@
 # Problem Statements #
 #####################
 
-Problem One:
-  A buffer overflow is a vulnerability in which data is written to a buffer or array past its expected bounds. This can cause problem and even be exploited to overwrite data or gain control of the program! In the following three parts you will use three vulnerable programs to overwrite a values on the stack to gain access to secret keys contained in the programs. 
+# Problem One #
+  A buffer overflow is a vulnerability in which data is written to a buffer or array past its expected bounds. This can cause problems and even be exploited to overwrite data or gain control of the program! In the following three parts you will use three vulnerable programs to overwrite a variable that is used as a check to control access to a secret keys contained in the programs. Pseudo code for the first program is as follows:
+-----------------------------------------
+    main(user_input):
+      target = "fail"
+      buffer[12]
+
+      stringCopy(buffer, user_input)
+
+      print(buffer, target)
+
+      if target == "pass"
+        print(key)
+      else:
+        print(fail_msg)
+    exit()
+-----------------------------------------
+
+Would you like to know more?
+If you would like to learn more about buffer overflows and how they are exploited see: 
+  Smashing The Stack For Fun And Profit, by Aleph One
+  https://inst.eecs.berkeley.edu/~cs161/fa08/papers/stack_smashing.pdf
 
 
-
-Problem One, Part A:
-  The program oflow_partA has two local variables stored on stack. The first is a buffer of twelve bytes and the second contains the text "fail". Use the command line input and the vulnerable buffer to overwrite the second variable with "pass" to gain access to the secret key. Record the input and the secret key as your solution. 
+## Problem One, Part A ##
+  The program oflow_partA has two local variables. The first is a buffer of twelve bytes and the second contains the text "fail". Use the command line input and the vulnerable buffer to overwrite the second variable with "pass" to gain access to the secret key. Record the input and the secret key as your solution. 
 
   Answer: 
     input: 0123456789abpass
     secret: "smash the stack"
 
 
-Problem One, Part B:
+## Problem One, Part B ##
   The program oflow_partB has three local variables stored on the stack. The first is a buffer of twelve bytes, the second contains the text "fail", and the third contains the text "hacker". Use command line input and the vulnerabile buffer to overwrite the second variable with "pass" without corrupting the third local variable. Record the input used and the secret key as your solution.
 
   Answer: 
@@ -23,7 +42,7 @@ Problem One, Part B:
     secret: "halt and catch fire"
 
 
-Problem One, Part C:
+## Problem One, Part C ##
   The program oflow_partC has three local variables stored on the stack. The first is buffer of twelve bytes, the second contains the text "hacker", and the third contains the text "fail". Use command line input and the vulnerable buffer to overwrite the third variable with "pass" without corrupting the second local variable. Record the input used and the secret key as your solution.
 
   Answer:
