@@ -6,17 +6,51 @@
 In this context a buffer is a span of memory that is "reserved" for some set of data. Reserved here is in quotations because at lower levels reservation of space is typcially by convention and contract only. Flawed implementations of this contract can lead to vulnerabilities like the buffer overflow
 
 # The Stack #
-The stack is a data structure you should have learned about in a previous course. Its a variable length structure and in this context you can think of it as growing upward toward lower addresses. In practice, a simplified version might look something like this:
+The stack is a data structure you should have learned about in a previous course. Its a variable length structure and in this context you can think of it as growing upward toward lower addresses. With rare exceptions most modern systems have stacks oriented in this way. In practice, a simplified version might look something like this:
          Address     Data
- Top     0x00004124  0xAAAA        
-         0x00004128  0xBBBB
          ...
-         0x000042F8  0xFAAA
- Bottom  0x000042FC  0xFBBB       
+ Top     0x00004124  ????        
+         0x00004128  ????
+         ...
+         ...
+         0x00008FF8  ????
+ Bottom  0x00008FFC  ????      
 
-In a program a stack is used to keep track of local variables and general data that a function needs to execute in a well-behaved manner with other functions. When you call a function some space is allocated on the stack by substracting some amount from the stack pointer-- adding free space to the top of the stack. The stack pointer is a register that holds the address of the current top of the stack. Data can also be pushed onto the stack. Pushing and popping instructions increment and decrement the stack pointer respectively. When the function exits the same amount is added back to the stack pointer, or pop instructions are used, to effectively "remove" that space. In this way the stack expands and contracts as fucntions are called. 
+In a program a stack is used to keep track of local variables and general data that processes and functions need to execute in a well-behaved manner. When you call a function some space is allocated on the stack by substracting some amount from the stack pointer-- adding free space to the top of the stack. The stack pointer is stored in a special register, SP or R13, to keep track of the top of the stack. Data can also be pushed onto the stack. Pushing and popping instructions increment and decrement the stack pointer respectively. When the function exits the same amount is added back to the stack pointer, or pop instructions are used, to effectively "remove" that space. In this way the stack expands and contracts as fucntions are called. 
+  /* Stack Before: */ 
+         Address     Data       
+         ...
+         0x00004118  ????
+         0x0000411C  ????
+         0x00004120  ????
+ SP ---> 0x00004124  ????   // Current Stack Pointer; Top of Stack        
+         0x00004128  ????
+         ...
+         ...
+         0x00008FF8  ????
+         0x00008FFC  ????   // Bottom of the Stack
+  
+  /* Add Space to the stack */
+  <main>:
+    e52db004 	push	{fp}
+    e28db000 	add	fp, sp, #0
+    e24dd01c 	sub	sp, sp, #8 ; Add 8 bytes of space to stack.
+         
+  /* Stack After */         
+         Address     Data       
+         ...
+         0x00004118  ????
+ SP ---> 0x0000411C  ????   // New Stack Pointer; Top of Stack
+         0x00004120  ????
+         0x00004124  ????   // Old Stack Pointer
+         0x00004128  ????
+         ...
+         ...
+         0x00008FF8  ????
+         0x00008FFC  ????   // Bottom of the Stack
+  
 
-Some function calling conventions, names x86, a arguments are pushed onto the stack prior to the function call. After the function is called space is made, by subtraction a value from the stack pointer, for local variables. In ARM the function calling convention only uses stack space if the there are more than 3 arguments.
+Some function calling conventions, such as x86, arguments are pushed onto the stack prior to the function call. After the function is called space is made, by subtraction a value from the stack pointer, for local variables. In ARM the function calling convention only uses stack space if the there are more than 3 arguments.
 
 Suppose we have a very simple C function:
 
@@ -26,14 +60,17 @@ Suppose we have a very simple C function:
     return B;
   }
 
-Before the program enters this function the argument A will be push on the stack. Then when the function is entered 4 bytes, or 8 if 64 bit, will be subtracted from the stack pointer for each local variable. Then the value(s) is moved onto the stack. The stack will look something like:
+Before the program enters this function the argument A will be stored in R0. Then when the function is entered 4 bytes, or 8 if 64 bit, will be subtracted from the stack pointer for each local variable. Then the value(s) is moved onto the stack. The stack will look something like:
 
-  ...   
-  0xBB  // First local variable; Value at the top of the stack
-  0xCC  // Second local variable
-  0xAA  // First argument 
-  ...
-        // Rest of stack
+         Address     Data       
+         ...
+         0x00004118  ????
+ SP ---> 0x0000411C  0x00BB   // int B "pushed" onto the Stack second
+         0x00004120  0x00CC   // Int C "pushed" onto the Stack first
+         0x00004124  ????   
+         0x00004128  ????
+         ...
+         ...
 
 # A Buffer Overflow #
 If int C in my_func from the previous section was instead an eight byte character array, the space for this array would be on the stack.
@@ -43,11 +80,12 @@ If int C in my_func from the previous section was instead an eight byte characte
     char C[8];
     return B;
   }
-
- 0x00004124 .. .. .. .. // Space for eight
- 0x00004128 .. .. .. .. // bytes of the char array
- 0x0000412C BB 00 00 00 // First local variable
- ...
+        Address    Data 
+        ...
+SP ---> 0x00004124 .. .. .. .. // Space for eight
+        0x00004128 .. .. .. .. // bytes of the char array
+        0x0000412C BB 00 00 00 // First local variable
+        ...
 
 When writing data to a buffer, and in general, the first byte is written at address X and the next byte at X+4. In the above example the twelfth byte will be at address 0x0000412B. The address just before the space for int B. If a function or logic were present that implemented the space reservation contracts incorrectly then we can write past 0x0000412B and alter the data contained in the space for int B.
 
@@ -66,20 +104,21 @@ Using strcpy we can create a my_func2 that will overwrite the local variable B.
   }
 
 Suppose A = "AAAAAAAAA" (9 bytes). This is larger than the space allocated for C by 1 bytes-- it doesnt fit. 
-  Stack before strcpy
+  /* Stack before strcpy */
+    Address    Data
     0x00004124 .. .. .. ..
     0x00004128 .. .. .. ..
     0x0000412c BB 00 00 00 
       ........ .. .. .. .. 
-      // Rest of stack....
 
 Then strcpy moves A into C
-  Stack after strcpy
+  /* Stack after strcpy */
+    Address    Data
+    ...        .. .. .. ..
     0x00004124 41 41 41 41 // 0x41 = 'A'
     0x00004128 41 41 41 41
     0x0000412c 41 00 00 00 
       ........ .. .. .. .. 
-      // Rest of stack....
 
 Strcpy have overwritten the value in int B giving it a new value of 0x41! We can do the same with 10 bytes or more. There is a limitation associated with strcpy when trying to exploit a buffer overflow vulnerability. The buffer can only be written with printable ascii characters. This may sometimes be enough though. 
 
@@ -100,8 +139,9 @@ At a glance it appears as though inaccessable_function() should never be execute
     
 A mitigation for this would be to change the order of the local variables. This would place B above C on the stack. Then when C overflows down the stack, B is out of the vulnerable stack space. With this change, the inaccessable_function would be inaccessable. 
 
-Local variables are not the only thing stored on the stack. When you enter a function the address of the next instruction is pushed onto the stack, before local variables, to be saved. Then the function exits it pops the address off the stack into the lr register (ARM) or eip/rip (x86/64). 
-  Stack of my_func3 after pushing local variables to stack
+Local variables are not the only thing stored on the stack. When you enter a non-leaf function the address of the next instruction is pushed onto the stack, before local variables, to be saved. A leaf function is one that does not call any other functions. Then the function exits it pops the address off the stack into the lr register (ARM) or eip/rip (x86/64). 
+  /* Stack of my_func3 after pushing local variables to stack */
+    Address    Data
     0x00004124 00 00 00 00
     0x00004128 .. .. .. ..
     0x0000412C .. .. .. ..
