@@ -16,7 +16,23 @@ The stack is a data structure you should have learned about in a previous course
          0x00008FF8  ????
  Bottom  0x00008FFC  ????      
 
-In a program a stack is used to keep track of local variables and general data that processes and functions need to execute in a well-behaved manner. When you call a function some space is allocated on the stack by substracting some amount from the stack pointer-- adding free space to the top of the stack. The stack pointer is stored in a special register, SP or R13, to keep track of the top of the stack. Data can also be pushed onto the stack. Pushing and popping instructions increment and decrement the stack pointer respectively. When the function exits the same amount is added back to the stack pointer, or pop instructions are used, to effectively "remove" that space. In this way the stack expands and contracts as fucntions are called. 
+In a program a stack is used to keep track of local variables and general data that processes and functions need to execute in a well-behaved manner. When you call a function some space is allocated on the stack by substracting some amount from the stack pointer-- adding free space to the top of the stack. The stack pointer is stored in a special register, SP or R13, to keep track of the top of the stack. Data can also be pushed onto the stack. Pushing and popping instructions increment and decrement the stack pointer respectively. When the function exits the same amount is added back to the stack pointer, or pop instructions are used, to effectively "remove" that space. The data added by the function is referred to as the function's stack frame.
+  /* Stack Frame */
+        +-----------------+ <-- low address
+        |  Top of Stack   |
+        +-----------------+
+        | Local Variables |
+        +-----------------+
+        |  Frame Pointer  |
+        +-----------------+
+        | Return Address  |
+        +-----------------+
+        |   Rest of the   |
+        |      Stack      |
+        +-----------------+ <-- high address
+
+Stacks typically "grow" toward lower address values. This isn't necessary but is true in most modern systems. Lets take a look at an example of a stack before and after the main function of an arm program is called.
+
   /* Stack Before: */ 
          Address     Data       
          ...
@@ -32,16 +48,16 @@ In a program a stack is used to keep track of local variables and general data t
   
   /* Add Space to the stack */
   <main>:
-    e52db004 	push	{fp}
+    e52db004 	push	{fp}     ; Push fp onto the stack, adjust sp.
     e28db000 	add	fp, sp, #0
     e24dd01c 	sub	sp, sp, #8 ; Add 8 bytes of space to stack.
          
   /* Stack After */         
          Address     Data       
          ...
-         0x00004118  ????
- SP ---> 0x0000411C  ????   // New Stack Pointer; Top of Stack
-         0x00004120  ????
+ SP ---> 0x00004118  ????   // New Stack Pointer; Top of Stack
+         0x0000411C  ????   
+         0x00004120  fp
          0x00004124  ????   // Old Stack Pointer
          0x00004128  ????
          ...
@@ -89,16 +105,17 @@ SP ---> 0x00004124 .. .. .. .. // Space for eight
 
 When writing data to a buffer, and in general, the first byte is written at address X and the next byte at X+4. In the above example the twelfth byte will be at address 0x0000412B. The address just before the space for int B. If a function or logic were present that implemented the space reservation contracts incorrectly then we can write past 0x0000412B and alter the data contained in the space for int B.
 
-The C function strcpy takes a string and copies it to another part of memory. It takes two arguments: destination and source. There are no bounds checks on the write. That is to say it will copy the contents of the source to the destination, byte by byte, until it comes across a null character used to terminate a string. The user of strcpy is expected to check that the string contained in the source will fit in the destination buffer. If it doesnt strcpy is content to continue writing bytes until it either reaches the end of the string or causes an error (sementation fault). 
+The C function strcpy takes a string and copies it to another part of memory. It takes two arguments: destination and source. There are no bounds checks on the write. That is to say it will copy the contents of the source to the destination, byte by byte, until it comes across a null character used to terminate the source string. The user of strcpy is expected to check that the string contained in the source will fit in the destination buffer. If it doesnt strcpy is content to continue writing bytes until it either reaches the end of the string or causes an error (sementation fault). 
 
 Using strcpy we can create a my_func2 that will overwrite the local variable B. 
 
   int my_func2(char *A) {
     int B = 0xBB;
     char C[8];
-    // Stack before strcpy
+
+      // Stack before strcpy
     strcpy(C, A);
-    //  Stack after strcpy
+      //  Stack after strcpy
 
     return B;
   }
@@ -151,17 +168,49 @@ Local variables are not the only thing stored on the stack. When you enter a non
 
 If this value is corrupted during function execution it will get popped off the stack and the CPU will try to execute the the corrupted value. Should the corrupted value be a valid instruction address the CPU will execute it however if it is not a valid address it will crash the program. This could allow us to control what code the CPU executes! 
 
-Unfortunately, we cant mitigate this by reordering any local variables. However, if we expect their to be an overflow we could place a special value, we know before hand, on the stack between the lr register and the local variables we can test it before the function exits. If the value isnt what we expected we can determine there was a stack overflow and prevent the function from returning by thowing an error. This will stop any overflow from executing unauthorized instructions. This special value is called a Stack Canary or Stack Cookie.
+Unfortunately, we cant mitigate this by reordering any local variables. However, if we expect their to be an overflow we could place a special value, one we know before hand, on the stack between the lr register and the local variables we can test it before the function exits. If the value isnt what we expected we can determine there was a stack overflow and prevent the function from returning by thowing an error. This will stop any overflow from executing unauthorized instructions. This special value is called a Stack Canary or Stack Cookie.
 
 # Stack Canaries #
+A stack canary is a filler word or data placed between function data pushed onto the stack and other data in the stack frame. This filler word can be random, static, or hybrid. A random stack canary will provide greater security as there is little chance for an attacker to know the value prior to execution of the program. 
+
+  /* Stack without Canary */
+    +-------------------+ <---- Top of the stack
+    |      Buffer       |
+    |                   |
+    |                   |
+    +-------------------+
+    |  Local Variables  |
+    +-------------------+
+    |   Frame Pointer   |   // fp
+    +-------------------+
+    |  Return Address   |   // lr
+    +-------------------+
+    |    Rest of the    |
+    |       Stack       |
+    +-------------------+ <---- Bottom of the stack
 
 
+  /* Stack with Canary */
+    +-------------------+ <---- Top of the stack
+    |      Buffer       |
+    |                   |
+    |                   |
+    +-------------------+
+    |  Local Variables  |
+    +-------------------+
+    |   Stack Canary    | 
+    +-------------------+
+    |   Frame Pointer   |   // fp
+    +-------------------+
+    |  Return Address   |   // lr
+    +-------------------+
+    |    Rest of the    |
+    |       Stack       |
+    +-------------------+ <---- Bottom of the stack
 
+When a function is entered, the stack canary will be pushed onto the stack. After this the function continues to execute as it normally would. At the end of the function, prior to returning, the value of the canary is checked for integrity. If they value is corrupted the an exception is thrown. The creation of the canary and the checking of its values are done via function calls. 
 
-
-
-
-
+Inorder to maximize the security offered by stack canaries they should be employed in every function and use random values only known at runtime. These two things can be set with compiler flags and most modern systems have these enabled by default. 
 
 
 
