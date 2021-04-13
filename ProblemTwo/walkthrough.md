@@ -84,7 +84,7 @@ It's not quite right. We notice that this address has a 0 as its first octet and
 Looking at this result we see that we now have a full address, but the values are wrong. They're backwards! We change our string at the end from 'KCAH' to 'HACK' and try again.
 
 ```sh
-  user@host$ ./demo AAAAAAAAAAAAAAAAKCAH
+  user@host$ ./demo AAAAAAAAAAAAAAAAHACK
   Hello to the string consumer 3000!
   You provided me a string! Yum!
     _____
